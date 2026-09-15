@@ -1,0 +1,32 @@
+seed: 42
+
+paths:
+  dataset_root: bdd100k/bdd100k_-images-100k-DatasetNinja
+  processed_dir: data_processed
+  artifacts_dir: artifacts
+  benchmark_queries: benchmark/queries.json
+  reports_dir: reports
+
+dataset:
+  total_size: 10000
+  dev_size: 8000
+  test_size: 2000
+  reject_placeholder_metadata: true
+
+model:
+  name: ViT-B-32
+  pretrained: laion2b_s34b_b79k
+  batch_size: 64
+
+retrieval:
+  candidate_k: 100
+  top_k: 10
+
+hybrid:
+  semantic_weight: 0.8
+  metadata_weight: 0.2
+
+runtime:
+  use_cuda: true
+  mixed_precision: true
+

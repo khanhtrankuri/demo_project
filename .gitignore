@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+# Local datasets, model caches, and generated machine-specific metadata
+bdd100k/
+data_processed/*.csv
+data_processed/stats.json
+bdd100k_audit_report.json
+.cache/
+.env
+.env.*
+!.env.example
+data_processed/feedback.jsonl
+artifacts/embeddings/*.npy
+artifacts/indexes/*.faiss
+artifacts/indexes/*.backend.json
+artifacts/mappings/*.json
+reports/baseline_metrics.csv
+reports/baseline_metrics.json

@@ -1,0 +1,23 @@
+[
+  {"query": "person", "conditions": {"objects": ["person"]}},
+  {"query": "bus", "conditions": {"objects": ["bus"]}},
+  {"query": "truck", "conditions": {"objects": ["truck"]}},
+  {"query": "car", "conditions": {"objects": ["car"]}},
+  {"query": "bicycle", "conditions": {"objects": ["bike"]}},
+  {"query": "motorcycle", "conditions": {"objects": ["motorcycle"]}},
+  {"query": "night road", "conditions": {"timeofday": "nighttime"}},
+  {"query": "rainy road", "conditions": {"weather": "rainy"}},
+  {"query": "snowy road", "conditions": {"weather": "snowy"}},
+  {"query": "daytime road", "conditions": {"timeofday": "daytime"}},
+  {"query": "person at night", "conditions": {"timeofday": "nighttime", "objects": ["person"]}},
+  {"query": "bus at night", "conditions": {"timeofday": "nighttime", "objects": ["bus"]}},
+  {"query": "car on highway", "conditions": {"scene": "highway", "objects": ["car"]}},
+  {"query": "truck on highway", "conditions": {"scene": "highway", "objects": ["truck"]}},
+  {"query": "bus on city street", "conditions": {"scene": "city street", "objects": ["bus"]}},
+  {"query": "person on city street", "conditions": {"scene": "city street", "objects": ["person"]}},
+  {"query": "rainy city street", "conditions": {"weather": "rainy", "scene": "city street"}},
+  {"query": "residential at night", "conditions": {"scene": "residential", "timeofday": "nighttime"}},
+  {"query": "traffic light at night", "conditions": {"timeofday": "nighttime", "objects": ["traffic light"]}},
+  {"query": "traffic sign on highway", "conditions": {"scene": "highway", "objects": ["traffic sign"]}}
+]
+
