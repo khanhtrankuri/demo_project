@@ -18,6 +18,16 @@ model:
   pretrained: laion2b_s34b_b79k
   batch_size: 64
 
+language_model:
+  enabled: true
+  name: Qwen/Qwen2.5-1.5B-Instruct
+  max_new_tokens: 160
+
+video:
+  sample_fps: 2.0
+  top_k: 10
+  temporary_frame_dir: artifacts/video_frames
+
 retrieval:
   candidate_k: 100
   top_k: 10
@@ -29,4 +39,3 @@ hybrid:
 runtime:
   use_cuda: true
   mixed_precision: true
-
