@@ -9,3 +9,6 @@ Pillow>=10,<13
 PyYAML>=6,<7
 tqdm>=4.66,<5
 pytest>=8,<10
+transformers>=4.48,<5
+accelerate>=1.2,<2
+opencv-python>=4.10,<5
