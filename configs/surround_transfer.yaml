@@ -1,0 +1,26 @@
+seed: 42
+dataset:
+  processed_dir: data_processed/nuscenes_surround
+model:
+  backbone: ViT-B-32
+  pretrained_repo: laion/CLIP-ViT-B-32-laion2B-s34B-b79K
+  pretrained_file: open_clip_model.safetensors
+  width: 512
+  bottleneck: 128
+  dropout: 0.2
+  residual_scale: 0.2
+training:
+  output_dir: artifacts/nuscenes_surround_transfer
+  epochs: 30
+  batch_size: 128
+  learning_rate: 0.0003
+  weight_decay: 0.05
+  patience: 6
+  min_delta: 0.001
+  scene_weight: 1.0
+  object_weight: 0.2
+  anchor_weight: 1.0
+  camera_dropout: 0.1
+runtime:
+  cache_batch_size: 64
+  workers: 4

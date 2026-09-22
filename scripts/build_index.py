@@ -28,9 +28,9 @@ def main() -> None:
     config = load_config(args.config)
     processed_dir = resolve_path(config, config["paths"]["processed_dir"])
     artifacts_dir = resolve_path(config, config["paths"]["artifacts_dir"])
-    metadata_path = processed_dir / "metadata.csv"
+    metadata_path = processed_dir / str(config.get("dataset", {}).get("metadata_file", "metadata.csv"))
     if not metadata_path.is_file():
-        raise SystemExit(f"Missing {metadata_path}; run scripts/prepare_bdd100k.py first")
+        raise SystemExit(f"Missing {metadata_path}; run the configured dataset preparation script first")
     frame = pd.read_csv(metadata_path, keep_default_na=False)
     if args.split != "all":
         frame = frame[frame["split"] == args.split].reset_index(drop=True)
@@ -38,10 +38,11 @@ def main() -> None:
         raise SystemExit(f"No records available for split={args.split}")
 
     model_cfg = config["model"]
+    inference_pretrained = model_cfg.get("inference_pretrained", model_cfg["pretrained"])
     batch_size = args.batch_size or int(model_cfg["batch_size"])
     encoder = CLIPEncoder(
         model_name=model_cfg["name"],
-        pretrained=model_cfg["pretrained"],
+        pretrained=inference_pretrained,
         device=args.device,
         mixed_precision=bool(config["runtime"].get("mixed_precision", True)),
     )
@@ -59,7 +60,14 @@ def main() -> None:
     mapping = []
     for row in valid_frame.to_dict(orient="records"):
         row["objects"] = [value for value in str(row.get("objects", "")).split("|") if value]
-        row["num_objects"] = int(row["num_objects"])
+        row["num_objects"] = int(
+            row.get("num_objects") or row.get("num_annotations") or len(row["objects"])
+        )
+        # The retrieval layer consumes one canonical schema for both BDD100K
+        # and nuScenes while retaining all dataset-specific columns.
+        row["weather"] = str(row.get("weather") or row.get("weather_tag") or "unknown")
+        row["timeofday"] = str(row.get("timeofday") or row.get("timeofday_tag") or "unknown")
+        row["scene"] = str(row.get("scene") or "unknown")
         mapping.append(row)
 
     index_started = time.perf_counter()

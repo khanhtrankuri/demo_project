@@ -1,0 +1,36 @@
+seed: 42
+dataset:
+  root: nuScense/extracted
+  version: v1.0-trainval
+  processed_dir: data_processed/nuscenes_surround
+  validation_fraction: 0.1
+  test_fraction: 0.1
+  # Preserve the previous held-out scenes when this CSV exists.
+  preserve_test_csv: data_processed/nuscenes_10k/test.csv
+model:
+  name: SurroundSearch-v1
+  initialization: scratch
+  image_height: 160
+  image_width: 288
+  width: 256
+  text_layers: 3
+  fusion_layers: 2
+  heads: 4
+  max_text_bytes: 192
+  dropout: 0.2
+training:
+  output_dir: artifacts/nuscenes_surround
+  epochs: 40
+  batch_size: 16  # 16 samples x 6 cameras = 96 images.
+  num_workers: 4
+  learning_rate: 0.0003
+  weight_decay: 0.05
+  warmup_epochs: 3
+  patience: 6
+  min_delta: 0.001
+  object_loss_weight: 0.5
+  scene_loss_weight: 0.25
+  view_loss_weight: 1.0
+  camera_dropout: 0.15
+  max_grad_norm: 1.0
+  precision: amp

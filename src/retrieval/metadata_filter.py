@@ -11,6 +11,8 @@ VALUE_ALIASES = {
     "bicycle": "bike",
     "people": "person",
     "pedestrian": "person",
+    "traffic_cone": "traffic cone",
+    "gas stations": "gas station",
 }
 
 

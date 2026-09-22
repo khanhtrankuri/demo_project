@@ -1,0 +1,23 @@
+# Fine-tune OpenCLIP on the complete local BDD100K dataset (100K images).
+seed: 42
+
+paths:
+  dataset_root: bdd100k/bdd100k_-images-100k-DatasetNinja
+
+model:
+  name: ViT-B-32
+  pretrained: laion2b_s34b_b79k
+
+training:
+  # Include all official BDD100K splits: 70K train + 10K val + 20K test.
+  splits: [train, val, test]
+  output_dir: artifacts/checkpoints/full_dataset
+  epochs: 20
+  batch_size: 16
+  learning_rate: 0.000005
+  weight_decay: 0.2
+  warmup_steps: 500
+  gradient_accumulation: 1
+  max_grad_norm: 1.0
+  num_workers: 4
+  precision: amp

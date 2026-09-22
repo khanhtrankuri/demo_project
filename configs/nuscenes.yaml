@@ -1,0 +1,70 @@
+dataset:
+  format: nuscenes
+  archive_dir: nuScense
+  archive_pattern: "*.tgz"
+  extract_dir: nuScense/extracted
+  output_dir: data_processed/nuscenes_10k
+  metadata_file: metadata.csv
+
+paths:
+  dataset_root: data_processed/nuscenes_10k
+  processed_dir: data_processed/nuscenes_10k
+  artifacts_dir: artifacts/nuscenes_10k
+  benchmark_queries: benchmark/queries.json
+  reports_dir: reports/nuscenes_10k
+
+selection:
+  camera: CAM_FRONT
+  keyframes_only: true
+  target_size: 10000
+  dev_target: 8000
+  test_target: 2000
+  seed: 42
+
+extraction:
+  force: false
+
+metadata:
+  derive_weather_from_description: true
+  derive_timeofday_from_description: true
+
+model:
+  name: ViT-B-32
+  pretrained: laion2b_s34b_b79k
+  inference_pretrained: artifacts/nuscenes_10k/checkpoints_regularized/best_model.pt
+  batch_size: 64
+
+training:
+  splits: [dev]
+  output_dir: artifacts/nuscenes_10k/checkpoints_regularized
+  epochs: 10
+  batch_size: 32
+  learning_rate: 0.000001
+  weight_decay: 0.3
+  warmup_steps: 200
+  gradient_accumulation: 1
+  max_grad_norm: 1.0
+  num_workers: 4
+  precision: amp
+  # Hold out complete scenes from dev; test remains untouched until final evaluation.
+  validation_fraction: 0.1
+  validation_batch_size: 64
+  early_stopping_patience: 3
+  min_delta: 0.002
+
+runtime:
+  use_cuda: true
+  mixed_precision: true
+
+retrieval:
+  candidate_k: 100
+  top_k: 10
+
+hybrid:
+  semantic_weight: 0.8
+  metadata_weight: 0.2
+
+language_model:
+  enabled: true
+  name: Qwen/Qwen2.5-1.5B-Instruct
+  max_new_tokens: 160

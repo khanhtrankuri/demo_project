@@ -18,6 +18,20 @@ model:
   pretrained: laion2b_s34b_b79k
   batch_size: 64
 
+training:
+  # The final fine-tuning run intentionally consumes all 100K native images.
+  splits: [train, val, test]
+  output_dir: artifacts/checkpoints
+  epochs: 5
+  batch_size: 32
+  learning_rate: 0.000005
+  weight_decay: 0.2
+  warmup_steps: 500
+  gradient_accumulation: 1
+  max_grad_norm: 1.0
+  num_workers: 4
+  precision: amp
+
 language_model:
   enabled: true
   name: Qwen/Qwen2.5-1.5B-Instruct

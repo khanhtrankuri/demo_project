@@ -36,7 +36,8 @@ def main() -> None:
     expected = 10_000 if args.split == "all" else int((metadata["split"] == args.split).sum())
     assert index.ntotal == expected, f"Expected ntotal={expected}, got {index.ntotal}"
     model_cfg = config["model"]
-    encoder = CLIPEncoder(model_cfg["name"], model_cfg["pretrained"], mixed_precision=bool(config["runtime"].get("mixed_precision", True)))
+    inference_pretrained = model_cfg.get("inference_pretrained", model_cfg["pretrained"])
+    encoder = CLIPEncoder(model_cfg["name"], inference_pretrained, mixed_precision=bool(config["runtime"].get("mixed_precision", True)))
     text_embedding = encoder.encode_text("pedestrian at night")
     assert text_embedding.shape[0] == 1
     semantic = SemanticSearchEngine(encoder, index_path, mapping_path)

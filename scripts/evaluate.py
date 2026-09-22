@@ -36,7 +36,8 @@ def main() -> None:
     config = load_config(args.config)
     artifacts = resolve_path(config, config["paths"]["artifacts_dir"])
     model_cfg = config["model"]
-    encoder = CLIPEncoder(model_cfg["name"], model_cfg["pretrained"], mixed_precision=bool(config["runtime"].get("mixed_precision", True)))
+    inference_pretrained = model_cfg.get("inference_pretrained", model_cfg["pretrained"])
+    encoder = CLIPEncoder(model_cfg["name"], inference_pretrained, mixed_precision=bool(config["runtime"].get("mixed_precision", True)))
     semantic = SemanticSearchEngine(encoder, artifacts / "indexes" / f"{args.split}.faiss", artifacts / "mappings" / f"{args.split}.json")
     hybrid = HybridSearchEngine(semantic, config["hybrid"]["semantic_weight"], config["hybrid"]["metadata_weight"])
     encoder.encode_text("warmup")

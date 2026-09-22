@@ -13,3 +13,9 @@ def test_query_parser_preserves_semantic_query_and_extracts_terms():
 def test_synonyms():
     assert parse_query("bicycle and motorbike near cars")["objects"] == ["motorcycle", "bike", "car"]
 
+
+def test_nuscenes_terms():
+    parsed = parse_query("construction zone intersection with traffic cones and barriers")
+    assert parsed["scene"] == "construction zone"
+    assert parsed["objects"] == ["traffic cone", "barrier"]
+
