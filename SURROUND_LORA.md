@@ -33,29 +33,66 @@ distillation từ một bản sao frozen CLIP-L.
 
 ## Sử dụng
 
-Dùng environment `scenesearch` (đã kiểm tra với torch 2.7.1+cu128,
-transformers 4.57.6). Không cần cài thêm PEFT.
+Dùng Windows PowerShell tại thư mục gốc của repository. Pipeline đã được kiểm
+tra với Python 3.11, torch 2.7.1+cu128 và transformers 4.57.6. Không cần cài
+thêm PEFT.
+
+Đặt các archive nuScenes trong `nuScense/`:
+
+```text
+nuScense/
+  v1.0-trainval_meta.tgz
+  v1.0-trainval01_keyframes.tgz
+  v1.0-trainval02_keyframes.tgz
+  ...
+```
+
+Chạy lần lượt từ cài thư viện đến train:
 
 ```powershell
+# 1. Tạo environment và cài thư viện.
+conda create -n scenesearch python=3.11 -y
 conda activate scenesearch
-# Chỉ cần lần đầu; khoảng 1,71 GB safetensors + tokenizer/config.
+python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install -r requirements.txt
+python -c "import torch; print(torch.__version__, 'CUDA available:', torch.cuda.is_available())"
+
+# 2. Giải nén nuScenes vào nuScense/extracted.
+# Bước này cũng tạo data_processed/nuscenes_10k/test.csv để khóa test scenes.
+python scripts/prepare_nuscenes.py --config configs/nuscenes.yaml
+
+# 3. Xử lý cả sáu camera và chia scene thành train/val/test.
+python scripts/prepare_surround.py --config configs/surround.yaml
+
+# 4. Tải CLIP ViT-L/14, khoảng 1,71 GB safetensors + tokenizer/config.
 python surround_lora.py download
 
-# Hai optimizer steps trên train + encode một subset validation, đo VRAM.
+# 5. Chạy hai optimizer steps và encode một subset validation để kiểm tra VRAM.
 python surround_lora.py smoke
 
-# Full training: toàn bộ 7.068 train samples / 42.408 ảnh, cả 6 camera.
+# 6. Full training trên train split; checkpoint được chọn bằng validation.
 python surround_lora.py train
 
-# Resume từ checkpoint CUỐI EPOCH đã hoàn thành, cùng cấu hình.
+# Resume từ checkpoint cuối epoch đã hoàn thành với cùng cấu hình.
 python surround_lora.py train --resume
 
-# Chỉ eval test sau khi đã chọn checkpoint bằng validation.
+# 7. Chỉ đánh giá test sau khi best.pt đã được chọn bằng validation.
 python surround_lora.py eval
 python surround_lora.py index --split test
 python surround_lora.py query --split test --query "A road view containing car, person."
 python surround_lora.py query --split test --level scene --query "A busy intersection with pedestrians."
 ```
+
+Nếu environment `scenesearch` đã tồn tại thì bỏ qua `conda create`. Nếu dữ liệu
+đã được giải nén và `data_processed/nuscenes_10k/test.csv` đã tồn tại thì bỏ
+qua bước 2. Bước 3 tạo `data_processed/nuscenes_surround/train.jsonl`,
+`val.jsonl`, `test.jsonl` và `stats.json`; ảnh gốc chỉ được tham chiếu, không bị
+sao chép. Split được thực hiện theo toàn bộ `scene_token`, không theo FPS, để
+các frame gần nhau của cùng một scene không xuất hiện ở nhiều partition.
+
+Pipeline hiện dùng annotated keyframes khoảng 2 Hz. Sáu camera tại cùng một
+`sample_token` được ghép thành một mẫu. Các camera sweep trung gian không có
+annotation tương đương keyframe và không được đưa vào supervised training.
 
 Trong workspace này, model gốc đã được tải vào
 `artifacts/pretrained/clip-vit-large-patch14`. Ngoài lệnh `download`, các lệnh
