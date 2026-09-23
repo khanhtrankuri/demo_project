@@ -363,13 +363,33 @@ def validate_records(records: list[dict[str, Any]], workers: int = 8) -> tuple[l
     return valid, rejected
 
 
-def deterministic_select(records: list[dict[str, Any]], target: int, seed: int) -> list[dict[str, Any]]:
+def selection_target(value: Any, available: int) -> int:
+    """Resolve an integer cap or the literal 'all' without silently truncating."""
+    if value is None or (isinstance(value, str) and value.strip().lower() == "all"):
+        return available
+    try:
+        target = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("selection.target_size must be a positive integer or 'all'") from exc
+    if target <= 0:
+        raise ValueError("selection.target_size must be positive")
+    if target > available:
+        raise ValueError(f"Requested {target:,} images but only {available:,} are valid")
+    return target
+
+
+def deterministic_select(records: list[dict[str, Any]], target: int | str | None, seed: int) -> list[dict[str, Any]]:
     ordered = sorted(records, key=lambda row: str(row["sample_data_token"]))
+    resolved = selection_target(target, len(ordered))
+    if resolved == len(ordered):
+        return ordered
     random.Random(seed).shuffle(ordered)
-    return ordered[:target]
+    return ordered[:resolved]
 
 
 def scene_level_split(records: list[dict[str, Any]], dev_target: int, test_target: int, seed: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if not records or dev_target <= 0 or test_target <= 0:
+        raise ValueError("Scene split requires records and positive dev/test targets")
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in records:
         groups[str(row["scene_token"])].append(row)
@@ -466,7 +486,7 @@ def normalize_existing_outputs(output_dir: Path) -> dict[str, int]:
     return counts
 
 
-def export_outputs(output_dir: Path, selected: list[dict[str, Any]], dev: list[dict[str, Any]], test: list[dict[str, Any]], stats: dict[str, Any], seed: int) -> None:
+def export_outputs(output_dir: Path, selected: list[dict[str, Any]], dev: list[dict[str, Any]], test: list[dict[str, Any]], stats: dict[str, Any], seed: int, requested_target: Any) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     dev_rows = [csv_row(row, "dev") for row in dev]
     test_rows = [csv_row(row, "test") for row in test]
@@ -476,7 +496,10 @@ def export_outputs(output_dir: Path, selected: list[dict[str, Any]], dev: list[d
     (output_dir / "stats.json").write_text(json.dumps(stats, indent=2) + "\n", encoding="utf-8")
     selection = {
         "seed": seed,
-        "algorithm": "sort by sample_data_token, shuffle with random.Random(seed), take target_size; bounded subset-sum scene split",
+        "requested_target_size": requested_target,
+        "algorithm": ("sort by sample_data_token, keep all valid records; bounded subset-sum scene split"
+                      if len(selected) == stats["valid_images"] else
+                      "sort by sample_data_token, shuffle with random.Random(seed), take target_size; bounded subset-sum scene split"),
         "sample_data_tokens": [row["sample_data_token"] for row in selected],
         "sha256": hashlib.sha256("\n".join(row["sample_data_token"] for row in selected).encode()).hexdigest(),
     }
@@ -531,14 +554,22 @@ def main() -> None:
     selection = config["selection"]
     candidates = join_cam_front_records(extract_root, str(selection["camera"]), bool(selection["keyframes_only"]))
     valid, rejected = validate_records(candidates, args.workers)
-    target = int(selection["target_size"])
     print(f"Found {len(valid):,} valid CAM_FRONT keyframes.")
-    if len(valid) < target:
-        print(f"Need {target - len(valid):,} additional images.")
-        print("Download another nuScenes keyframe part.")
-        raise SystemExit(2)
-    selected = deterministic_select(valid, target, int(selection["seed"]))
-    dev, test = scene_level_split(selected, int(selection["dev_target"]), int(selection["test_target"]), int(selection["seed"]))
+    requested_target = selection.get("target_size", "all")
+    try:
+        selected = deterministic_select(valid, requested_target, int(selection["seed"]))
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if "test_fraction" in selection:
+        test_fraction = float(selection["test_fraction"])
+        if not 0 < test_fraction < 1:
+            raise ValueError("selection.test_fraction must be between 0 and 1")
+        test_target = max(1, round(len(selected) * test_fraction))
+        dev_target = len(selected) - test_target
+    else:
+        dev_target = int(selection["dev_target"])
+        test_target = int(selection["test_target"])
+    dev, test = scene_level_split(selected, dev_target, test_target, int(selection["seed"]))
     dev_scenes = {row["scene_token"] for row in dev}
     test_scenes = {row["scene_token"] for row in test}
     if dev_scenes & test_scenes:
@@ -549,6 +580,8 @@ def main() -> None:
         "cam_front_keyframe_candidates": len(candidates),
         "valid_images": len(valid),
         "selected": len(selected),
+        "selection_target": requested_target,
+        "all_valid_images_selected": len(selected) == len(valid),
         "dev_count": len(dev), "test_count": len(test),
         "dev_scenes": len(dev_scenes), "test_scenes": len(test_scenes),
         "scene_leakage": 0,
@@ -557,7 +590,7 @@ def main() -> None:
         "other_rejections": rejected_counts["other"],
         "derived_fields": ["weather_tag", "timeofday_tag"],
     }
-    export_outputs(output_dir, selected, dev, test, stats, int(selection["seed"]))
+    export_outputs(output_dir, selected, dev, test, stats, int(selection["seed"]), requested_target)
     print(json.dumps(stats, indent=2))
     print(f"Wrote outputs to {output_dir.resolve()}")
 

@@ -6,7 +6,7 @@ dataset:
   validation_fraction: 0.1
   test_fraction: 0.1
   # Preserve the previous held-out scenes when this CSV exists.
-  preserve_test_csv: data_processed/nuscenes_10k/test.csv
+  preserve_test_csv: data_processed/nuscenes_full/test.csv
 model:
   name: SurroundSearch-v1
   initialization: scratch

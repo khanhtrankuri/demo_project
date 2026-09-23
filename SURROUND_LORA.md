@@ -58,7 +58,8 @@ python -m pip install -r requirements.txt
 python -c "import torch; print(torch.__version__, 'CUDA available:', torch.cuda.is_available())"
 
 # 2. Giải nén nuScenes vào nuScense/extracted.
-# Bước này cũng tạo data_processed/nuscenes_10k/test.csv để khóa test scenes.
+# Script đọc mọi file nuScense/*.tgz và giữ toàn bộ CAM_FRONT keyframe hợp lệ.
+# Nó cũng tạo data_processed/nuscenes_full/test.csv để khóa test scenes.
 python scripts/prepare_nuscenes.py --config configs/nuscenes.yaml
 
 # 3. Xử lý cả sáu camera và chia scene thành train/val/test.
@@ -84,7 +85,7 @@ python surround_lora.py query --split test --level scene --query "A busy interse
 ```
 
 Nếu environment `scenesearch` đã tồn tại thì bỏ qua `conda create`. Nếu dữ liệu
-đã được giải nén và `data_processed/nuscenes_10k/test.csv` đã tồn tại thì bỏ
+đã được giải nén và `data_processed/nuscenes_full/test.csv` đã tồn tại thì bỏ
 qua bước 2. Bước 3 tạo `data_processed/nuscenes_surround/train.jsonl`,
 `val.jsonl`, `test.jsonl` và `stats.json`; ảnh gốc chỉ được tham chiếu, không bị
 sao chép. Split được thực hiện theo toàn bộ `scene_token`, không theo FPS, để
@@ -93,6 +94,10 @@ các frame gần nhau của cùng một scene không xuất hiện ở nhiều p
 Pipeline hiện dùng annotated keyframes khoảng 2 Hz. Sáu camera tại cùng một
 `sample_token` được ghép thành một mẫu. Các camera sweep trung gian không có
 annotation tương đương keyframe và không được đưa vào supervised training.
+`selection.target_size: all` trong `configs/nuscenes.yaml` bỏ giới hạn 10K.
+Với 3 archive keyframe hiện có, bước 2 tìm 10.120 ảnh CAM_FRONT; bước 3 dùng
+các scene đó và tạo 60.720 ảnh sáu camera. Khi thêm archive keyframe mới vào
+`nuScense/`, chạy lại cả bước 2 và 3 để đưa toàn bộ ảnh mới vào manifests.
 
 Trong workspace này, model gốc đã được tải vào
 `artifacts/pretrained/clip-vit-large-patch14`. Ngoài lệnh `download`, các lệnh

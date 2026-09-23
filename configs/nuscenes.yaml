@@ -3,22 +3,23 @@ dataset:
   archive_dir: nuScense
   archive_pattern: "*.tgz"
   extract_dir: nuScense/extracted
-  output_dir: data_processed/nuscenes_10k
+  output_dir: data_processed/nuscenes_full
   metadata_file: metadata.csv
 
 paths:
-  dataset_root: data_processed/nuscenes_10k
-  processed_dir: data_processed/nuscenes_10k
-  artifacts_dir: artifacts/nuscenes_10k
+  dataset_root: data_processed/nuscenes_full
+  processed_dir: data_processed/nuscenes_full
+  artifacts_dir: artifacts/nuscenes_full
   benchmark_queries: benchmark/queries.json
-  reports_dir: reports/nuscenes_10k
+  reports_dir: reports/nuscenes_full
 
 selection:
   camera: CAM_FRONT
   keyframes_only: true
-  target_size: 10000
-  dev_target: 8000
-  test_target: 2000
+  # Use every valid CAM_FRONT keyframe found in all matching archives.
+  # prepare_surround.py subsequently expands these scenes to all six cameras.
+  target_size: all
+  test_fraction: 0.2
   seed: 42
 
 extraction:
@@ -31,12 +32,12 @@ metadata:
 model:
   name: ViT-B-32
   pretrained: laion2b_s34b_b79k
-  inference_pretrained: artifacts/nuscenes_10k/checkpoints_regularized/best_model.pt
+  inference_pretrained: artifacts/nuscenes_full/checkpoints_regularized/best_model.pt
   batch_size: 64
 
 training:
   splits: [dev]
-  output_dir: artifacts/nuscenes_10k/checkpoints_regularized
+  output_dir: artifacts/nuscenes_full/checkpoints_regularized
   epochs: 10
   batch_size: 32
   learning_rate: 0.000001

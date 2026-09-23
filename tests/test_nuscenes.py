@@ -19,6 +19,7 @@ from scripts.prepare_nuscenes import (
     join_cam_front_records,
     normalize_csv,
     scene_level_split,
+    selection_target,
     simplify_category,
     validate_records,
 )
@@ -138,6 +139,25 @@ def test_deterministic_10k_selection() -> None:
     second = deterministic_select(list(reversed(rows)), 10_000, 42)
     assert len(first) == 10_000
     assert [r["sample_data_token"] for r in first] == [r["sample_data_token"] for r in second]
+
+
+def test_full_selection_keeps_every_valid_image_in_stable_order() -> None:
+    rows = [{"sample_data_token": token} for token in ("c", "a", "b")]
+    assert selection_target("all", len(rows)) == 3
+    assert selection_target(None, len(rows)) == 3
+    assert [row["sample_data_token"] for row in deterministic_select(rows, "all", 42)] == ["a", "b", "c"]
+    with pytest.raises(ValueError, match="only 3"):
+        deterministic_select(rows, 4, 42)
+    with pytest.raises(ValueError, match="positive integer"):
+        deterministic_select(rows, "everything", 42)
+
+
+def test_fractional_full_scene_split_has_no_leakage() -> None:
+    rows = [{"scene_token": f"scene-{index // 4}", "sample_data_token": str(index)} for index in range(120)]
+    test_target = round(len(rows) * .2)
+    dev, test = scene_level_split(rows, len(rows) - test_target, test_target, 42)
+    assert (len(dev), len(test)) == (96, 24)
+    assert {r["scene_token"] for r in dev}.isdisjoint({r["scene_token"] for r in test})
 
 
 def test_scene_level_split_has_no_leakage() -> None:
