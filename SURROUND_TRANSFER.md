@@ -66,18 +66,57 @@ experiments should be selected on validation, not repeatedly tuned against
 this test result. Weak object captions and the gap between whole-scene
 descriptions and individual instants remain limitations of this benchmark.
 
-## Commands
+## Setup and run in order (Windows PowerShell)
+
+Run these commands from the repository root. Create the Conda environment only
+if `scenesearch` does not already exist. The CUDA 12.8 wheels below match the
+project's pinned PyTorch versions and the local RTX 4060 installation; for a
+different GPU/driver, choose a compatible wheel from the
+[PyTorch install guide](https://pytorch.org/get-started/previous-versions/).
 
 ```powershell
+# 1. Install libraries (skip conda create if the environment already exists).
+conda create -n scenesearch python=3.11 -y
 conda activate scenesearch
+python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install -r requirements.txt
+python -c "import torch; print(torch.__version__, 'CUDA available:', torch.cuda.is_available())"
+
+# 2. Extract all nuScenes archives from nuScense/*.tgz into nuScense/extracted.
+# This script also creates data_processed/nuscenes_10k/test.csv.
+python scripts/prepare_nuscenes.py --config configs/nuscenes.yaml
+
+# 3. Process all six cameras and split complete scenes into train/val/test.
+python scripts/prepare_surround.py --config configs/surround.yaml
+
+# 4. Download the exact OpenCLIP base weights used by v2 (first run only).
+python -c "from huggingface_hub import hf_hub_download; print(hf_hub_download('laion/CLIP-ViT-B-32-laion2B-s34B-b79K', 'open_clip_model.safetensors'))"
+
+# 5. Cache frozen CLIP features for train and validation, then train v2.
 python surround_transfer.py cache
 python surround_transfer.py train
-# Resume an interrupted run with: python surround_transfer.py train --resume
+
+# 6. After best.pt is selected on validation, evaluate the held-out test set.
 python surround_transfer.py cache --split test
 python surround_transfer.py eval
 python surround_transfer.py index --split test
 python surround_transfer.py query --split test --query "A road view containing car, person."
 ```
+
+The archives must be under `nuScense/` as configured in
+`configs/nuscenes.yaml`. If `nuScense/extracted/` and
+`data_processed/nuscenes_10k/test.csv` already exist, skip step 2. Step 3
+writes `data_processed/nuscenes_surround/{train,val,test}.jsonl` and
+`stats.json`; it references the original images without copying them. The
+existing 10K test scene IDs are preserved when that CSV is present. Without
+the old CSV, a fresh scene split is created and the measured scores above are
+not directly reproducible.
+
+If `artifacts/nuscenes_surround_transfer/best.pt` already exists, set a new
+`training.output_dir` in `configs/surround_transfer.yaml` before starting a
+fresh run. To continue an interrupted run with identical settings, use
+`python surround_transfer.py train --resume` instead. Do not use the test
+cache or test metrics for checkpoint selection.
 
 For indexes of train or validation, pass `--split train` or `--split val` to
 both `index` and `query`. `--level scene` queries six-camera samples. V2 uses
