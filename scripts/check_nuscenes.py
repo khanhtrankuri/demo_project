@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import sys
 from pathlib import Path
@@ -12,11 +13,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.prepare_nuscenes import (  # noqa: E402
+    configured_cameras,
     configured_path,
     discover_archives,
     image_error,
     inspect_archive,
-    join_cam_front_records,
+    join_camera_records,
     load_config,
     no_archive_message,
     print_archive,
@@ -53,8 +55,11 @@ def main() -> None:
     if extract_root.is_dir():
         try:
             selection = config["selection"]
-            records = join_cam_front_records(extract_root, str(selection["camera"]), bool(selection["keyframes_only"]))
-            report["cam_front_keyframes"] = len(records)
+            cameras = configured_cameras(selection.get("cameras", selection.get("camera", "CAM_FRONT")))
+            records = join_camera_records(extract_root, cameras, bool(selection["keyframes_only"]))
+            report["camera_channels"] = list(cameras)
+            report["camera_keyframes"] = len(records)
+            report["per_camera"] = dict(Counter(row["camera_channel"] for row in records))
             report["missing_images"] = sum(not Path(row["image_path"]).is_file() for row in records)
             if args.validate_images:
                 errors = [image_error(Path(row["image_path"])) for row in records]

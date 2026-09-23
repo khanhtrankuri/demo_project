@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a validated, scene-separated nuScenes CAM_FRONT keyframe subset."""
+"""Extract all archives and prepare a validated six-camera nuScenes dataset."""
 
 from __future__ import annotations
 
@@ -36,6 +36,10 @@ METADATA_TABLES = {
     "calibrated_sensor.json", "sample_annotation.json", "category.json",
     "instance.json", "ego_pose.json", "log.json",
 }
+CAMERA_CHANNELS = (
+    "CAM_FRONT", "CAM_FRONT_LEFT", "CAM_FRONT_RIGHT",
+    "CAM_BACK", "CAM_BACK_LEFT", "CAM_BACK_RIGHT",
+)
 CSV_FIELDS = [
     "image_id", "image_path", "sample_token", "sample_data_token",
     "scene_token", "scene_name", "scene_description", "timestamp",
@@ -255,7 +259,23 @@ def derive_tags(description: str) -> tuple[str, str]:
     return normalize_weather(description), normalize_timeofday(description)
 
 
-def join_cam_front_records(extract_root: Path, camera: str = "CAM_FRONT", keyframes_only: bool = True) -> list[dict[str, Any]]:
+def configured_cameras(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        cameras = CAMERA_CHANNELS if value.strip().lower() == "all" else (value.strip(),)
+    elif isinstance(value, (list, tuple)):
+        cameras = tuple(str(camera).strip() for camera in value)
+    else:
+        raise ValueError("selection.cameras must be a camera list or 'all'")
+    if not cameras or len(set(cameras)) != len(cameras):
+        raise ValueError("selection.cameras must contain unique camera channels")
+    unsupported = sorted(set(cameras) - set(CAMERA_CHANNELS))
+    if unsupported:
+        raise ValueError(f"Unsupported camera channels: {unsupported}")
+    return cameras
+
+
+def join_camera_records(extract_root: Path, cameras: tuple[str, ...] = CAMERA_CHANNELS,
+                        keyframes_only: bool = True) -> list[dict[str, Any]]:
     samples = by_token(read_table(extract_root, "sample.json"), "sample.json")
     scenes = by_token(read_table(extract_root, "scene.json"), "scene.json")
     sensors = by_token(read_table(extract_root, "sensor.json"), "sensor.json")
@@ -273,7 +293,7 @@ def join_cam_front_records(extract_root: Path, camera: str = "CAM_FRONT", keyfra
     for sample_data in read_table(extract_root, "sample_data.json"):
         calibration = calibrated.get(str(sample_data.get("calibrated_sensor_token", "")))
         sensor = sensors.get(str(calibration.get("sensor_token", ""))) if calibration else None
-        if not sensor or sensor.get("channel") != camera:
+        if not sensor or sensor.get("channel") not in cameras:
             continue
         is_key_frame = bool(sample_data.get("is_key_frame"))
         if keyframes_only and not is_key_frame:
@@ -324,6 +344,11 @@ def join_cam_front_records(extract_root: Path, camera: str = "CAM_FRONT", keyfra
     return result
 
 
+def join_cam_front_records(extract_root: Path, camera: str = "CAM_FRONT", keyframes_only: bool = True) -> list[dict[str, Any]]:
+    """Backward-compatible wrapper for the original single-camera API."""
+    return join_camera_records(extract_root, (camera,), keyframes_only)
+
+
 def image_error(path: Path) -> str | None:
     if not path.is_file():
         return "missing"
@@ -335,7 +360,8 @@ def image_error(path: Path) -> str | None:
         return f"corrupt: {type(exc).__name__}: {exc}"
 
 
-def validate_records(records: list[dict[str, Any]], workers: int = 8) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+def validate_records(records: list[dict[str, Any]], workers: int = 8,
+                     expected_cameras: tuple[str, ...] = ("CAM_FRONT",)) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     paths = [Path(row["image_path"]) for row in records]
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         errors = list(pool.map(image_error, paths))
@@ -352,7 +378,7 @@ def validate_records(records: list[dict[str, Any]], workers: int = 8) -> tuple[l
         if canonical_path in image_paths: reason = reason or "duplicate image_path"
         if not row.get("sample_token"): reason = reason or "missing sample_token"
         if not row.get("scene_token"): reason = reason or "missing scene_token"
-        if row.get("camera_channel") != "CAM_FRONT": reason = reason or "not CAM_FRONT"
+        if row.get("camera_channel") not in expected_cameras: reason = reason or "unexpected camera channel"
         if row.get("is_key_frame") is not True: reason = reason or "not a keyframe"
         if reason:
             rejected.append({"sample_data_token": token, "image_path": row["image_path"], "reason": reason})
@@ -552,9 +578,10 @@ def main() -> None:
     for path in archives:
         print(f"Extraction {path.name}: {extract_archive(path, extract_root, force)}")
     selection = config["selection"]
-    candidates = join_cam_front_records(extract_root, str(selection["camera"]), bool(selection["keyframes_only"]))
-    valid, rejected = validate_records(candidates, args.workers)
-    print(f"Found {len(valid):,} valid CAM_FRONT keyframes.")
+    cameras = configured_cameras(selection.get("cameras", selection.get("camera", "CAM_FRONT")))
+    candidates = join_camera_records(extract_root, cameras, bool(selection["keyframes_only"]))
+    valid, rejected = validate_records(candidates, args.workers, cameras)
+    print(f"Found {len(valid):,} valid keyframes across {len(cameras)} cameras.")
     requested_target = selection.get("target_size", "all")
     try:
         selected = deterministic_select(valid, requested_target, int(selection["seed"]))
@@ -577,7 +604,10 @@ def main() -> None:
     rejected_counts = Counter("missing" if row["reason"] == "missing" else "corrupt" if row["reason"].startswith("corrupt:") else "other" for row in rejected)
     stats = {
         "archives": [asdict(info) for info in infos],
-        "cam_front_keyframe_candidates": len(candidates),
+        "camera_channels": list(cameras),
+        "camera_keyframe_candidates": len(candidates),
+        "per_camera_candidates": dict(Counter(row["camera_channel"] for row in candidates)),
+        "per_camera_selected": dict(Counter(row["camera_channel"] for row in selected)),
         "valid_images": len(valid),
         "selected": len(selected),
         "selection_target": requested_target,

@@ -35,5 +35,6 @@ Configuration is stored in `configs/surround_lora.yaml`. Generated datasets,
 pretrained weights, checkpoints and indexes are excluded from Git.
 
 Dataset preparation reads every `nuScense/*.tgz` archive. The nuScenes
-selection config uses `target_size: all`, and the LoRA manifests include every
-valid annotated keyframe from all six cameras, split by complete scenes.
+selection config explicitly lists all six cameras and uses `target_size: all`.
+The LoRA manifests include every valid annotated keyframe, split by complete
+scenes.

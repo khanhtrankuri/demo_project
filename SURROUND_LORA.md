@@ -58,7 +58,7 @@ python -m pip install -r requirements.txt
 python -c "import torch; print(torch.__version__, 'CUDA available:', torch.cuda.is_available())"
 
 # 2. Giải nén nuScenes vào nuScense/extracted.
-# Script đọc mọi file nuScense/*.tgz và giữ toàn bộ CAM_FRONT keyframe hợp lệ.
+# Script đọc mọi file nuScense/*.tgz và giữ toàn bộ keyframe hợp lệ của 6 camera.
 # Nó cũng tạo data_processed/nuscenes_full/test.csv để khóa test scenes.
 python scripts/prepare_nuscenes.py --config configs/nuscenes.yaml
 
@@ -95,8 +95,9 @@ Pipeline hiện dùng annotated keyframes khoảng 2 Hz. Sáu camera tại cùng
 `sample_token` được ghép thành một mẫu. Các camera sweep trung gian không có
 annotation tương đương keyframe và không được đưa vào supervised training.
 `selection.target_size: all` trong `configs/nuscenes.yaml` bỏ giới hạn 10K.
-Với 3 archive keyframe hiện có, bước 2 tìm 10.120 ảnh CAM_FRONT; bước 3 dùng
-các scene đó và tạo 60.720 ảnh sáu camera. Khi thêm archive keyframe mới vào
+Với 3 archive keyframe hiện có, bước 2 tìm và xuất 60.720 ảnh của sáu camera;
+bước 3 nhóm chúng thành 10.120 mẫu surround và tạo nhãn FOV theo từng camera.
+Khi thêm archive keyframe mới vào
 `nuScense/`, chạy lại cả bước 2 và 3 để đưa toàn bộ ảnh mới vào manifests.
 
 Trong workspace này, model gốc đã được tải vào

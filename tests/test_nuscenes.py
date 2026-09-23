@@ -10,13 +10,16 @@ import pytest
 from PIL import Image
 
 from scripts.prepare_nuscenes import (
+    CAMERA_CHANNELS,
     archive_signature,
     classify_member_names,
+    configured_cameras,
     deterministic_select,
     discover_archives,
     extract_archive,
     inspect_archive,
     join_cam_front_records,
+    join_camera_records,
     normalize_csv,
     scene_level_split,
     selection_target,
@@ -123,6 +126,22 @@ def test_cam_front_keyframe_filter_and_token_joins(tmp_path: Path) -> None:
     assert row["objects"] == ["car"]
     assert row["weather_tag"] == "rainy"
     assert row["timeofday_tag"] == "nighttime"
+
+
+def test_all_six_camera_configuration_and_multi_camera_join(tmp_path: Path) -> None:
+    metadata_fixture(tmp_path)
+    for relative in ("samples/CAM_FRONT/a.jpg", "samples/CAM_BACK/c.jpg"):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(jpeg_bytes())
+    assert configured_cameras("all") == CAMERA_CHANNELS
+    assert configured_cameras(list(CAMERA_CHANNELS)) == CAMERA_CHANNELS
+    rows = join_camera_records(tmp_path, CAMERA_CHANNELS)
+    assert {row["camera_channel"] for row in rows} == {"CAM_FRONT", "CAM_BACK"}
+    valid, rejected = validate_records(rows, workers=1, expected_cameras=CAMERA_CHANNELS)
+    assert len(valid) == 2 and not rejected
+    with pytest.raises(ValueError, match="Unsupported"):
+        configured_cameras(["CAM_FRONT", "CAM_UNKNOWN"])
 
 
 @pytest.mark.parametrize(("raw", "simple"), [

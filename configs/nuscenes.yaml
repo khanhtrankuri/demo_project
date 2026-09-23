@@ -14,10 +14,15 @@ paths:
   reports_dir: reports/nuscenes_full
 
 selection:
-  camera: CAM_FRONT
+  cameras:
+    - CAM_FRONT
+    - CAM_FRONT_LEFT
+    - CAM_FRONT_RIGHT
+    - CAM_BACK
+    - CAM_BACK_LEFT
+    - CAM_BACK_RIGHT
   keyframes_only: true
-  # Use every valid CAM_FRONT keyframe found in all matching archives.
-  # prepare_surround.py subsequently expands these scenes to all six cameras.
+  # Use every valid keyframe from all six cameras in all matching archives.
   target_size: all
   test_fraction: 0.2
   seed: 42
