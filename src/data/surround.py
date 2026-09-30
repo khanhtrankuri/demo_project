@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 
 from src.data.nuscenes import normalize_object
+from src.data.rich_caption import enrich_record_captions
 
 CAMERAS = ("CAM_FRONT", "CAM_FRONT_LEFT", "CAM_FRONT_RIGHT",
            "CAM_BACK", "CAM_BACK_LEFT", "CAM_BACK_RIGHT")
@@ -86,6 +87,38 @@ def boxes_in_camera(corners, ego_pose, calibration, width, height):
     return inside.any(axis=1) & (depth > 0.1).all(axis=1)
 
 
+def camera_yaw(calibration):
+    """Yaw of the camera frame relative to ego, in radians."""
+    matrix = rotation(calibration["rotation"])
+    return float(np.arctan2(matrix[1, 0], matrix[0, 0]))
+
+
+def object_geometry(annotation, ego_pose, calibration, width, height):
+    """Derive ego distance and image-horizontal bin from a nuScenes 3D box."""
+    center_ego = (np.asarray(annotation["translation"], dtype=np.float64)
+                  - np.asarray(ego_pose["translation"], dtype=np.float64)) @ rotation(ego_pose["rotation"])
+    center_camera = (center_ego - np.asarray(calibration["translation"], dtype=np.float64)) @ rotation(calibration["rotation"])
+    projected = center_camera @ np.asarray(calibration["camera_intrinsic"], dtype=np.float64).T
+    u = float(projected[0] / projected[2]) if projected[2] > 1e-8 else width / 2
+    fraction = min(1.0, max(0.0, u / width))
+    spatial = "left" if fraction < 1 / 3 else "right" if fraction > 2 / 3 else "center"
+    distance = float(np.linalg.norm(center_ego[:2]))
+    distance_bin = "near" if distance < 15 else "medium" if distance < 35 else "far"
+    return spatial, distance, distance_bin
+
+
+def normalize_attribute(names):
+    """Map nuScenes attributes to a small retrieval vocabulary."""
+    joined = " ".join(names).lower()
+    if "moving" in joined:
+        return "moving"
+    if "parked" in joined or "stopped" in joined:
+        return "parked"
+    if "standing" in joined:
+        return "standing"
+    return None
+
+
 def scene_splits(scene_tokens, seed, validation_fraction, test_fraction, locked_test=()):
     if not 0 < validation_fraction < 1 or not 0 < test_fraction < 1 or validation_fraction + test_fraction >= 1:
         raise ValueError("Split fractions must be positive and sum to less than one")
@@ -129,6 +162,7 @@ def prepare_dataset(root, output, *, version="v1.0-trainval", seed=42,
     sensors, calibrations = keyed("sensor"), keyed("calibrated_sensor")
     scenes, samples = keyed("scene"), keyed("sample")
     categories, instances = keyed("category"), keyed("instance")
+    attributes = keyed("attribute") if (tables / "attribute.json").is_file() else {}
     local_files = {str(p.relative_to(root)).replace("\\", "/") for camera in CAMERAS
                    for p in (root / "samples" / camera).glob("*") if p.is_file()}
     if not local_files:
@@ -155,7 +189,15 @@ def prepare_dataset(root, output, *, version="v1.0-trainval", seed=42,
     for ann in table("sample_annotation"):
         if ann["sample_token"] in needed_samples:
             name = categories[instances[ann["instance_token"]]["category_token"]]["name"]
-            annotations[ann["sample_token"]].append((normalize_object(name), box_corners(ann)))
+            annotations[ann["sample_token"]].append({
+                "class": normalize_object(name),
+                "corners": box_corners(ann),
+                "translation": ann["translation"],
+                "instance_token": ann["instance_token"],
+                "attribute": normalize_attribute([
+                    attributes[token]["name"] for token in ann.get("attribute_tokens", []) if token in attributes
+                ]),
+            })
     locked_test = set()
     if previous_test and Path(previous_test).is_file():
         with Path(previous_test).open(encoding="utf-8-sig", newline="") as handle:
@@ -177,9 +219,21 @@ def prepare_dataset(root, output, *, version="v1.0-trainval", seed=42,
         sample_token = row["sample_token"]
         scene_token = samples[sample_token]["scene_token"]
         ann = annotations[sample_token]
-        visible = boxes_in_camera([a[1] for a in ann], poses[row["ego_pose_token"]],
+        pose = poses[row["ego_pose_token"]]
+        calibration = calibrations[row["calibrated_sensor_token"]]
+        visible = boxes_in_camera([a["corners"] for a in ann], pose,
                                   calibrations[row["calibrated_sensor_token"]], row["width"], row["height"])
-        counts = Counter(a[0] for a, present in zip(ann, visible) if present)
+        object_instances = []
+        for item, present in zip(ann, visible):
+            if not present:
+                continue
+            spatial, distance, distance_bin = object_geometry(item, pose, calibration, row["width"], row["height"])
+            object_instances.append({
+                "class": item["class"], "instance_token": item["instance_token"],
+                "spatial": spatial, "distance_m": round(distance, 2), "distance_bin": distance_bin,
+                "attribute": item["attribute"], "camera": row["camera"],
+            })
+        counts = Counter(item["class"] for item in object_instances)
         objects = sorted(counts)
         # Do not claim scene-wide actions are visible in each camera.
         caption = "A road view" + (" containing " + ", ".join(objects) if objects else "") + "."
@@ -187,6 +241,10 @@ def prepare_dataset(root, output, *, version="v1.0-trainval", seed=42,
                   "sample_token": sample_token, "scene_token": scene_token,
                   "camera": row["camera"], "timestamp": row["timestamp"],
                   "objects": objects, "object_counts": dict(counts),
+                  "object_instances": object_instances,
+                  "geometry": {"yaw": camera_yaw(calibration),
+                               "translation": list(calibration["translation"])},
+                  "annotation_quality": "3d_box_fov_projection_no_occlusion",
                   "caption": caption, "split": splits[scene_token]}
         rows.append(record)
         group = groups.setdefault(sample_token, {
@@ -201,6 +259,8 @@ def prepare_dataset(root, output, *, version="v1.0-trainval", seed=42,
             print(f"Validated/projected {index + 1:,}/{len(data):,} images", flush=True)
     output.mkdir(parents=True, exist_ok=True)
     grouped = sorted(groups.values(), key=lambda r: r["sample_token"])
+    for group in grouped:
+        enrich_record_captions(group)
     if not grouped or any(not any(r["split"] == s for r in grouped) for s in ("train", "val", "test")):
         raise ValueError("A split has no valid images")
     write_jsonl(output / "images.jsonl", rows)

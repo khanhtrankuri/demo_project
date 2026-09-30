@@ -1,0 +1,88 @@
+seed: 42
+dataset:
+  processed_dir: data_processed/nuscenes_surround
+
+model:
+  architecture: SurroundSearch-v4
+  backbone: clip                    # clip | siglip | siglip2
+  repo: openai/clip-vit-large-patch14
+  local_dir: artifacts/pretrained/clip-vit-large-patch14
+  image_resolution: 224             # 224 | 336 (must match checkpoint)
+  num_spatial_crops: 3
+  precision: bf16
+  gradient_checkpointing: true
+  width: 768
+  vision_lora:
+    rank: 4
+    alpha: 8
+    dropout: 0.05
+    targets: [q_proj, v_proj]
+  text_lora:
+    enabled: true
+    last_layers: 4
+    rank: 4
+    alpha: 8
+    dropout: 0.05
+    targets: [q_proj, v_proj]
+  spatial:
+    layers: 1
+    heads: 8
+    dropout: 0.1
+    backbone_batch_size: 8          # RTX 4060 benchmarked; reduce to 4/1 if VRAM is tight
+  fusion:
+    type: transformer                 # transformer | weighted (ablation only)
+    layers: 2
+    heads: 8
+    dropout: 0.1
+  reranker:
+    enabled: true
+    candidates: 50
+    layers: 2
+    heads: 8
+    dropout: 0.1
+  geometry:
+    enabled: true
+
+training:
+  output_dir: artifacts/surround_v4
+  epochs: 20
+  micro_batch_size: 4
+  effective_batch_size: 32
+  vision_lora_lr: 0.00005
+  text_lora_lr: 0.00002
+  head_lr: 0.0002
+  weight_decay: 0.05
+  camera_dropout: 0.1
+  queue_size: 2048                 # 1024 | 2048 | 4096
+  queue_enabled: true
+  rich_captions: true
+  multi_positive: true
+  hard_negatives_per_anchor: 1
+  hard_negative_margin: 0.2
+  loss:
+    view: 1.0
+    scene: 1.0
+    hard_negative: 0.5
+    object: 0.2
+    count: 0.1
+    spatial: 0.2
+    distance: 0.1
+    regularization: 0.02
+
+runtime:
+  workers: 4
+  eval_batch_size: 1
+  text_batch_size: 32
+  top_k: 50
+
+wandb:
+  enabled: true
+  project: surroundsearch-v4
+  entity: null                     # optional W&B username/team
+  name: null                       # null lets W&B generate a unique run name
+  group: null
+  tags: [nuscenes, surround-v4, retrieval]
+  mode: online                     # online | offline | disabled
+  save_code: true
+  log_smoke: false
+  log_checkpoint: false           # true uploads best.pt as a model artifact

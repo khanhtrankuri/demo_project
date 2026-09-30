@@ -1,5 +1,34 @@
 # nuScenes Surround Retrieval with CLIP LoRA
 
+## SurroundSearch-v4 and Kaggle 2 x T4
+
+The repository also includes the camera-aware `SurroundSearch-v4` architecture
+from P-056. Prepare the rich v4 manifests first, then launch distributed
+training on a Kaggle notebook with both T4 GPUs enabled:
+
+```bash
+!torchrun --standalone --nproc_per_node=2 train_kaggle_2gpu.py \
+  --config configs/surround_v4.yaml \
+  --data-dir /kaggle/input/<dataset>/nuscenes_surround \
+  --output-dir /kaggle/working/surround_v4 \
+  --precision fp16
+```
+
+T4 does not provide native BF16 acceleration, so the Kaggle trainer defaults
+to FP16 autocast with dynamic loss scaling. It uses one process per GPU,
+`DistributedSampler`, gradient synchronization only at optimizer boundaries,
+rank-0 checkpointing, and resumable optimizer/scaler/scheduler state. The
+effective batch size is global across both GPUs.
+
+Run a short integration check before a full job:
+
+```bash
+!torchrun --standalone --nproc_per_node=2 train_kaggle_2gpu.py \
+  --data-dir /kaggle/input/<dataset>/nuscenes_surround \
+  --output-dir /kaggle/working/surround_v4_smoke \
+  --max-steps 2 --no-wandb
+```
+
 The current architecture uses `openai/clip-vit-large-patch14` with LoRA on the
 vision transformer's query and value projections. It trains on synchronized
 six-camera nuScenes samples and is designed for an 8 GB local NVIDIA GPU.
